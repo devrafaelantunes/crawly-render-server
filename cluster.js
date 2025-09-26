@@ -5,9 +5,20 @@ let servedRequests = 0;
 let errorCount = 0;
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Health check endpoint for Heroku
+app.get('/', (req, res) => {
+    res.status(200).json({ 
+        status: 'ok', 
+        message: 'Crawly Render Server is running',
+        servedRequests,
+        errorCount
+    });
+});
+
 // Function to log server stats
 const logServerStats = () => {
     console.log(`Served Requests: ${servedRequests}`);
@@ -30,15 +41,19 @@ const launchOptions = {
         '--deterministic-fetch',
         '--disable-features=IsolateOrigins',
         '--disable-site-isolation-trials',
-        // '--single-process',
-
+        '--single-process',
+        '--memory-pressure-off',
+        '--max_old_space_size=512',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
     ],
 };
 if (process.env.CHROME_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.CHROME_EXECUTABLE_PATH;
 };
 
-let max_concurrency = 2;
+let max_concurrency = 1; // Reduced for Heroku memory constraints
 if (process.env.MAX_CONCURRENCY) {
     max_concurrency = parseInt(process.env.MAX_CONCURRENCY, 10);
   };
