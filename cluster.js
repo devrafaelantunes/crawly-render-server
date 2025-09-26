@@ -43,15 +43,23 @@ const launchOptions = {
         '--disable-site-isolation-trials',
         '--single-process',
         '--memory-pressure-off',
-        '--max_old_space_size=512',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-renderer-backgrounding',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor'
     ],
 };
+
+// Set Chrome executable path for Heroku
 if (process.env.CHROME_EXECUTABLE_PATH) {
     launchOptions.executablePath = process.env.CHROME_EXECUTABLE_PATH;
-};
+} else {
+    // Default Chrome path for Heroku
+    launchOptions.executablePath = '/usr/bin/google-chrome';
+}
 
 let max_concurrency = 1; // Reduced for Heroku memory constraints
 if (process.env.MAX_CONCURRENCY) {
@@ -59,12 +67,33 @@ if (process.env.MAX_CONCURRENCY) {
   };
 
 (async () => {
-    // Create a cluster with N workers
-    const cluster = await Cluster.launch({
-        concurrency: Cluster.CONCURRENCY_CONTEXT,
-        maxConcurrency: max_concurrency,
-        puppeteerOptions: launchOptions,
-    });
+    let cluster;
+    try {
+        console.log('Starting Puppeteer cluster with options:', JSON.stringify(launchOptions, null, 2));
+        console.log('Max concurrency:', max_concurrency);
+        
+        // Create a cluster with N workers
+        cluster = await Cluster.launch({
+            concurrency: Cluster.CONCURRENCY_CONTEXT,
+            maxConcurrency: max_concurrency,
+            puppeteerOptions: launchOptions,
+        });
+        
+        console.log('Puppeteer cluster started successfully');
+        
+        // Test Chrome executable
+        const fs = require('fs');
+        const chromePath = launchOptions.executablePath;
+        if (fs.existsSync(chromePath)) {
+            console.log('Chrome executable found at:', chromePath);
+        } else {
+            console.error('Chrome executable NOT found at:', chromePath);
+        }
+        
+    } catch (error) {
+        console.error('Failed to start Puppeteer cluster:', error);
+        process.exit(1);
+    }
 
     // Define a task
     cluster.task(async ({ page, data: {url, headers} }) => {
@@ -103,8 +132,13 @@ if (process.env.MAX_CONCURRENCY) {
             res.status(200).json(result);
         } catch (err) {
             errorCount++;
-            console.debug("[DEBUG] Could not get '" + url + "' Error: " + err)
-            res.status(500).json({ error: 'An error occurred while processing the URL.' + err });
+            console.error("[ERROR] Could not get '" + url + "' Error:", err.message);
+            console.error("Full error:", err);
+            res.status(500).json({ 
+                error: 'An error occurred while processing the URL.',
+                message: err.message,
+                url: url
+            });
         }
     });
 
